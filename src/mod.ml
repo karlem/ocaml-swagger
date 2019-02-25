@@ -23,12 +23,12 @@ let module_name s =
   |> List.hd
 
 let create ~name
-           ?descr
-           ?(recursive = false)
-           ?(path = [])
-           ?(types = [])
-           ?(submodules = StringMap.empty)
-           ?(values = []) () =
+    ?descr
+    ?(recursive = false)
+    ?(path = [])
+    ?(types = [])
+    ?(submodules = StringMap.empty)
+    ?(values = []) () =
   { name = module_name name
   ; path = List.map module_name path
   ; types
@@ -109,7 +109,12 @@ let object_module_impl ?(indent = 0) () =
   let pad = String.make indent ' ' in
   "\n" ^ pad ^ "module Object = Object.Make (struct type value = t [@@deriving yojson] end)\n"
 
+let make_path_value m =
+  let path = String.concat "." (qualified_path m) in
+  Val.create (Val.Sig.constant "path") (Val.Impl.constant "path" path)
+
 let rec sig_to_string ?(indent = 0) m =
+  let m = add_vals [make_path_value m] m in
   let pad = String.make indent ' ' in
   let doc =
     match m.descr with
@@ -119,12 +124,12 @@ let rec sig_to_string ?(indent = 0) m =
     m.submodules
     |> StringMap.bindings
     |> List.fold_left
-         (fun acc (name, m) ->
-           let s = sig_to_string ~indent:(indent + 2) m in
-           (* Definitions first to simplify references *)
-           if name = "Definitions" then s ^ acc
-           else acc ^ s)
-         "" in
+      (fun acc (name, m) ->
+         let s = sig_to_string ~indent:(indent + 2) m in
+         (* Definitions first to simplify references *)
+         if name = "Definitions" then s ^ acc
+         else acc ^ s)
+      "" in
   let indent = indent + 2 in
   sprintf "\n%s%smodule%s%s : sig\n%s%s\n%s%s%send\n"
     doc
@@ -133,25 +138,26 @@ let rec sig_to_string ?(indent = 0) m =
     m.name
     submods
     (String.concat "\n\n"
-      (List.map
-        (fun t -> Type.Sig.to_string ~indent (Type.signature t))
-        m.types))
+       (List.map
+          (fun t -> Type.Sig.to_string ~indent (Type.signature t))
+          m.types))
     (String.concat "\n"
-      (List.map
-        (fun v -> Val.Sig.to_string ~indent (Val.signature v))
-        m.values))
+       (List.map
+          (fun v -> Val.Sig.to_string ~indent (Val.signature v))
+          m.values))
     (if has_type_named "t" m then object_module_val ~indent () else "")
     pad
 
 let rec impl_to_string ?(indent = 0) m =
+  let m = add_vals [make_path_value m] m in
   let pad = String.make indent ' ' in
   let submods =
     m.submodules
     |> StringMap.bindings
     |> List.fold_left
-         (fun acc (_name, m) ->
-           acc ^ impl_to_string ~indent:(indent + 2) m)
-         "" in
+      (fun acc (_name, m) ->
+         acc ^ impl_to_string ~indent:(indent + 2) m)
+      "" in
   let decl =
     if m.recursive
     then ""
@@ -162,14 +168,14 @@ let rec impl_to_string ?(indent = 0) m =
     decl
     submods
     (String.concat "\n\n"
-      (List.map
-        (fun t ->
-          Type.Impl.to_string ~indent (Type.implementation t))
-        m.types))
+       (List.map
+          (fun t ->
+             Type.Impl.to_string ~indent (Type.implementation t))
+          m.types))
     (String.concat "\n"
-      (List.map
-        (fun v -> Val.Impl.to_string ~indent (Val.implementation v))
-        m.values))
+       (List.map
+          (fun v -> Val.Impl.to_string ~indent (Val.implementation v))
+          m.values))
     (if has_type_named "t" m then object_module_impl ~indent () else "")
     pad
 

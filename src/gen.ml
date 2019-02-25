@@ -6,9 +6,9 @@ let default z = function
   | None -> z
 
 module StringSet = Set.Make (struct
-  type t = string
-  let compare = compare
-end)
+    type t = string
+    let compare = compare
+  end)
 
 (* Unused types. *)
 [@@@ocaml.warning "-34"]
@@ -26,16 +26,16 @@ type response_or_reference =
 [@@@end]
 
 let merge_params (ps1 : Swagger_j.parameter list)
-                 (ps2 : Swagger_j.parameter list) =
+    (ps2 : Swagger_j.parameter list) =
   let rec merge acc = function
     | [] -> acc
     | (p : Swagger_j.parameter)::ps ->
-        let same_name (q : Swagger_j.parameter) =
-          let open Swagger_j in
-          p.name = q.name in
-        if List.exists same_name acc
-        then merge acc ps
-        else merge (p::acc) ps in
+      let same_name (q : Swagger_j.parameter) =
+        let open Swagger_j in
+        p.name = q.name in
+      if List.exists same_name acc
+      then merge acc ps
+      else merge (p::acc) ps in
   merge ps2 ps1
 
 let reference_module_and_type ~reference_base ~reference_root r =
@@ -64,10 +64,10 @@ let resp_type ~reference_base ~reference_root (resp : Swagger_j.response) =
   match resp.schema with
   | None -> (None, "unit")
   | Some s ->
-      let s = Schema.create ~reference_base ~reference_root s in
-      match Schema.reference s with
-      | Some r -> reference_module_and_type ~reference_base ~reference_root r
-      | None -> (None, Schema.to_string s)
+    let s = Schema.create ~reference_base ~reference_root s in
+    match Schema.reference s with
+    | Some r -> reference_module_and_type ~reference_base ~reference_root r
+    | None -> (None, Schema.to_string s)
 
 let rec return_type ~reference_root ~reference_base (resps : Swagger_j.responses) =
   let is_error code =
@@ -77,64 +77,64 @@ let rec return_type ~reference_root ~reference_base (resps : Swagger_j.responses
       let code = int_of_string code in
       code < 200 || code >= 300 in
   let responses_match (r1 : Swagger_j.response)
-                      (r2 : Swagger_j.response) =
+      (r2 : Swagger_j.response) =
     r1.schema = r2.schema in
   match resps with
   | [] -> None, "unit"
   | (code, _)::rs when is_error code ->
-      (* ignore errors; assume strings *)
-      return_type ~reference_root ~reference_base rs
+    (* ignore errors; assume strings *)
+    return_type ~reference_root ~reference_base rs
   | (_code, resp)::rs ->
-      (* check all 2xx responses return the same type *)
-      let rec check first = function
-        | [] ->
-            ()
-        | (code, _)::res when is_error code ->
-            check first res
-        | (_code', resp')::rs when responses_match first resp' ->
-            check first rs
-        | (_c, (_r : Swagger_j.response))::_ ->
-            failwith "multiple response types are not supported" in
-      let resp = parse_response resp in
-      check resp (parse_responses rs);
-      resp_type ~reference_base ~reference_root resp
+    (* check all 2xx responses return the same type *)
+    let rec check first = function
+      | [] ->
+        ()
+      | (code, _)::res when is_error code ->
+        check first res
+      | (_code', resp')::rs when responses_match first resp' ->
+        check first rs
+      | (_c, (_r : Swagger_j.response))::_ ->
+        failwith "multiple response types are not supported" in
+    let resp = parse_response resp in
+    check resp (parse_responses rs);
+    resp_type ~reference_base ~reference_root resp
 
 let make_dups params =
   List.fold_left
     (fun dups (p : Swagger_j.parameter) ->
-      match StringMap.find_opt p.name dups with
-      | Some count -> StringMap.add p.name (count + 1) dups
-      | None -> StringMap.add p.name 1 dups)
+       match StringMap.find_opt p.name dups with
+       | Some count -> StringMap.add p.name (count + 1) dups
+       | None -> StringMap.add p.name 1 dups)
     StringMap.empty
     params
 
 let operation_val ~root:_ ~reference_base ~reference_root name (params : Swagger_j.parameter list) = function
   | Some (op : Swagger_j.operation) ->
-      let op_params = parse_parameters op.parameters in
-      let params = merge_params params op_params in
-      let dups = make_dups params in
-      let param_sigs, param_impls =
-        params
-        |> List.map
-             (fun (p : Swagger_j.parameter) ->
-               let duplicate = StringMap.find p.name dups > 1 in
-               Param.create ~duplicate ~reference_base ~reference_root p)
-        |> List.split in
-      let return_module, return_type =
-        return_type ~reference_root ~reference_base op.responses in
-      let verb = Val.Impl.http_verb_of_string name in
-      let signature =
-        let descr = op.description in
-        Val.Sig.http_request ?descr name param_sigs return_type in
-      let return =
-        match return_module with
-        | Some module_name -> Val.Impl.module_ module_name
-        | None -> Val.Impl.type_ return_type in
-      let implementation =
-        Val.Impl.http_request verb name param_impls ~return in
-      Some (Val.create signature implementation)
+    let op_params = parse_parameters op.parameters in
+    let params = merge_params params op_params in
+    let dups = make_dups params in
+    let param_sigs, param_impls =
+      params
+      |> List.map
+        (fun (p : Swagger_j.parameter) ->
+           let duplicate = StringMap.find p.name dups > 1 in
+           Param.create ~duplicate ~reference_base ~reference_root p)
+      |> List.split in
+    let return_module, return_type =
+      return_type ~reference_root ~reference_base op.responses in
+    let verb = Val.Impl.http_verb_of_string name in
+    let signature =
+      let descr = op.description in
+      Val.Sig.http_request ?descr name param_sigs return_type in
+    let return =
+      match return_module with
+      | Some module_name -> Val.Impl.module_ module_name
+      | None -> Val.Impl.type_ return_type in
+    let implementation =
+      Val.Impl.http_request verb name param_impls ~return in
+    Some (Val.create signature implementation)
   | None ->
-      None
+    None
 
 let path_val path =
   Val.create
@@ -154,11 +154,42 @@ let path_item_vals ~root ~reference_base ~reference_root ~path (item : Swagger_j
   let patch   = operation_val "patch"   item.patch in
   path_val path :: keep_some [get; put; post; delete; options; head; patch]
 
+
+let make_get_field_type ~reference_base ~reference_root (fields: (string * Swagger_j.schema) list) : Val.t =
+  let fmt = sprintf {|
+      match field_name with%s
+      | _ -> invalid_arg ("Unkown field name: " ^ field_name)
+  |} in
+
+  let rec get_kind (s: Swagger_j.schema) =
+    match s.ref with
+    | Some ref ->
+      let ref = Mod.reference_type ~reference_base ~reference_root ref in
+      let ref = String.sub ref 0 (String.length ref - 2) in
+      "`Reference (module " ^ ref ^ " : Type_info.S)"
+    | None ->
+      match s.kind with
+      | Some `String  -> "`String"
+      | Some `Number  -> "`Float"
+      | Some `Integer -> "`Int"
+      | Some `Boolean -> "`Bool"
+      | Some `Object  -> "`Object"
+      | Some `Array   -> "`List (" ^ get_kind (some s.items) ^ ")"
+      | None -> failwith "No kind in schema without reference."
+  in
+  let fields = List.map (fun (name, schema) ->
+      sprintf "\n      | %S -> %s" name (get_kind schema)) fields in
+  let body = fmt (String.concat "" fields) in
+  let val_sig = Val.Sig.pure "get_field_type" [Val.Sig.positional "string"] "Field_type.t" in
+  let val_impl = Val.Impl.with_raw_body "get_field_type" [Val.Impl.positional "field_name" "string"] ~body in
+  Val.create val_sig val_impl
+
+
 let definition_module ?(path = [])
-                      ~root
-                      ~reference_base
-                      ~name
-                      (schema : Swagger_j.schema) =
+    ~root
+    ~reference_base
+    ~name
+    (schema : Swagger_j.schema) =
   let required = default [] schema.required in
   let properties = default [] schema.properties in
 
@@ -171,11 +202,11 @@ let definition_module ?(path = [])
   let create_params =
     List.fold_left
       (fun params (name, schema) ->
-        let s = Schema.create ~reference_base ~reference_root:root schema in
-        let param_type = Schema.to_string s in
-        let param_sig, param_impl =
-          create_param name param_type required in
-        (param_sig, param_impl) :: params)
+         let s = Schema.create ~reference_base ~reference_root:root schema in
+         let param_type = Schema.to_string s in
+         let param_sig, param_impl =
+           create_param name param_type required in
+         (param_sig, param_impl) :: params)
       [] in
 
   let alias_type () =
@@ -197,6 +228,7 @@ let definition_module ?(path = [])
     ([typ], [create]) in
 
   let record_type () =
+    let get_field_type_val = make_get_field_type ~reference_base ~reference_root:root properties in
     let params = create_params properties in
     let sig_params, impl_params = params |> List.split in
     let create =
@@ -205,31 +237,31 @@ let definition_module ?(path = [])
         (Val.Impl.record_constructor "make" impl_params) in
     let fields, values =
       List.fold_left
-        (fun (fields, values) (name, schema) ->
-          let s = Schema.create ~reference_base ~reference_root:root schema in
-          let s = Schema.to_string s in
-          let sig_type, impl_type =
-            if List.mem name required then
-              let type_ = sprintf "%s" s in
-              (type_, type_)
-            else
-              let type_ = sprintf "%s option" s in
-              (type_, sprintf "(%s [@default None])" type_) in
-          let pname = Param.name name in
-          let field =
-            Type.Impl.record_field
-              ~name:pname
-              ~orig_name:name
-              ~type_:impl_type in
-          let value =
-            let descr = schema.description in
-            Val.create
-              (Val.Sig.pure ?descr pname [Val.Sig.positional "t"] sig_type)
-              (Val.Impl.record_accessor pname [Val.Impl.positional "t" "t"]) in
-          (field :: fields, value :: values))
+        (fun (fields, values) (name, (schema: Swagger_j.schema)) ->
+           let s = Schema.create ~reference_base ~reference_root:root schema in
+           let s = Schema.to_string s in
+           let sig_type, impl_type =
+             if List.mem name required then
+               let type_ = sprintf "%s" s in
+               (type_, type_)
+             else
+               let type_ = sprintf "%s option" s in
+               (type_, sprintf "(%s [@default None])" type_) in
+           let pname = Param.name name in
+           let field =
+             Type.Impl.record_field
+               ~name:pname
+               ~orig_name:name
+               ~type_:impl_type in
+           let value =
+             let descr = schema.description in
+             Val.create
+               (Val.Sig.pure ?descr pname [Val.Sig.positional "t"] sig_type)
+               (Val.Impl.record_accessor pname [Val.Impl.positional "t" "t"]) in
+           (field :: fields, value :: values))
         ([], [])
         properties in
-    let values = create :: List.rev values in
+    let values = create :: get_field_type_val :: List.rev values in
     let type_sig = Type.Sig.abstract "t" in
     let type_impl = Type.Impl.record "t" fields in
     let typ = Type.create type_sig type_impl in
@@ -252,14 +284,14 @@ let definition_module ?(path = [])
 
 let rec insert_module m root = function
   | [] ->
-      Mod.add_mod m root
+    Mod.add_mod m root
   | p::ps ->
-      match Mod.find_submodule p root with
-      | Some subm ->
-          Mod.add_mod (insert_module m subm ps) root
-      | None ->
-          let subm = Mod.empty p ~path:(Mod.qualified_path root) () in
-          Mod.add_mod (insert_module m subm ps) root
+    match Mod.find_submodule p root with
+    | Some subm ->
+      Mod.add_mod (insert_module m subm ps) root
+    | None ->
+      let subm = Mod.empty p ~path:(Mod.qualified_path root) () in
+      Mod.add_mod (insert_module m subm ps) root
 
 (* Unused values. *)
 [@@@ocaml.warning "-32"]
@@ -273,59 +305,59 @@ let remove_base base segments =
 
 let rec build_paths ~root ~path_base ~reference_base ~reference_root = function
   | [] ->
-      root
+    root
   | (path, item) :: paths ->
-      let parents_and_child =
-        path
-        |> Mod.strip_base path_base
-        |> String.split_on_char '/'
-        |> List.filter ((<>)"")
-        |> unsnoc in
-      match parents_and_child with
-      | Some (parents, child) ->
-          let child_values =
-            path_item_vals ~root ~reference_base ~reference_root ~path item in
-          let child_module = Mod.with_values ~path:parents child child_values in
-          let root = insert_module child_module root parents in
-          build_paths ~root ~path_base ~reference_base ~reference_root paths
-      | None ->
-          let child_values =
-            path_item_vals ~root ~reference_base ~reference_root ~path item in
-          let root = Mod.add_vals child_values root in
-          build_paths ~root ~path_base ~reference_base ~reference_root paths
+    let parents_and_child =
+      path
+      |> Mod.strip_base path_base
+      |> String.split_on_char '/'
+      |> List.filter ((<>)"")
+      |> unsnoc in
+    match parents_and_child with
+    | Some (parents, child) ->
+      let child_values =
+        path_item_vals ~root ~reference_base ~reference_root ~path item in
+      let child_module = Mod.with_values ~path:parents child child_values in
+      let root = insert_module child_module root parents in
+      build_paths ~root ~path_base ~reference_base ~reference_root paths
+    | None ->
+      let child_values =
+        path_item_vals ~root ~reference_base ~reference_root ~path item in
+      let root = Mod.add_vals child_values root in
+      build_paths ~root ~path_base ~reference_base ~reference_root paths
 
 let rec build_definitions ~root ~definition_base ~reference_base l =
   match l with
   | [] -> root
   | (name, (schema : Swagger_j.schema)) :: defs when schema.ref = None ->
-      let parents_and_child =
-        name
-        |> Mod.strip_base definition_base
-        |> Mod.split_ref
-        |> unsnoc in
-      (match parents_and_child with
-      | Some (parents, child) ->
-          let def =
-            definition_module
-              ~root ~reference_base ~path:parents ~name:child schema in
-          let root = insert_module def root parents in
-          build_definitions ~root ~definition_base ~reference_base defs
-      | None ->
-          let root =
-            Mod.add_mod
-              (definition_module ~root ~reference_base ~name schema)
-              root in
-          build_definitions ~root ~definition_base ~reference_base defs)
+    let parents_and_child =
+      name
+      |> Mod.strip_base definition_base
+      |> Mod.split_ref
+      |> unsnoc in
+    (match parents_and_child with
+     | Some (parents, child) ->
+       let def =
+         definition_module
+           ~root ~reference_base ~path:parents ~name:child schema in
+       let root = insert_module def root parents in
+       build_definitions ~root ~definition_base ~reference_base defs
+     | None ->
+       let root =
+         Mod.add_mod
+           (definition_module ~root ~reference_base ~name schema)
+           root in
+       build_definitions ~root ~definition_base ~reference_base defs)
   (* XXX Ignore schemas that are simply references? Just use the referenced
    * module? In the kubernetes API this seems to be only for deprecated
    * stuff. *)
   | (_name, (_schema : Swagger_j.schema)) :: defs ->
-      build_definitions ~root ~definition_base ~reference_base defs
+    build_definitions ~root ~definition_base ~reference_base defs
 
 let of_swagger ?(path_base = "")
-               ?(definition_base = "")
-               ?(reference_base = "")
-               ~reference_root s =
+    ?(definition_base = "")
+    ?(reference_base = "")
+    ~reference_root s =
   let open Swagger_j in
   let definitions = default [] s.definitions in
   let title = s.info.title in

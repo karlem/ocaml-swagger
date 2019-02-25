@@ -32,11 +32,11 @@ module Sig = struct
     | Positional _
     | Named ({ descr = None; _ }, _)
     | Optional ({ descr = None; _ }, _) ->
-        None
+      None
     | Named ({ name; descr = Some descr }, _) ->
-        Some (sprintf "%s %s" name descr)
+      Some (sprintf "%s %s" name descr)
     | Optional ({ name; descr = Some descr }, _) ->
-        Some (sprintf "%s %s" name descr)
+      Some (sprintf "%s %s" name descr)
 
   let create ?descr kind name params return =
     let descr = descr :: List.map param_descr params |> keep_some in
@@ -81,26 +81,26 @@ module Sig = struct
     let params =
       match kind with
       | Pure ->
-          params
+        params
       | Http_request ->
-          let ctx = optional "ctx" "Cohttp_lwt_unix.Client.ctx" in
-          let headers = optional "headers" "Cohttp.Header.t" in
-          let uri = positional "Uri.t" in
-          params @ [ctx; headers; uri] in
+        let ctx = optional "ctx" "Cohttp_lwt_unix.Client.ctx" in
+        let headers = optional "headers" "Cohttp.Header.t" in
+        let uri = positional "Uri.t" in
+        params @ [ctx; headers; uri] in
     let doc =
       match descr with
       | [] -> ""
       | _ ->
-          let comment_pad = pad ^ String.make 3 ' ' in
-          let descr =
-            List.mapi
-              (fun i d ->
-                let d = format_comment d in
-                if i = 0
-                then sprintf "%s(** %s" pad d
-                else sprintf "\n%s @param %s" comment_pad d)
-              descr in
-          String.concat "\n" descr ^ " *)\n" in
+        let comment_pad = pad ^ String.make 3 ' ' in
+        let descr =
+          List.mapi
+            (fun i d ->
+               let d = format_comment d in
+               if i = 0
+               then sprintf "%s(** %s" pad d
+               else sprintf "\n%s @param %s" comment_pad d)
+            descr in
+        String.concat "\n" descr ^ " *)\n" in
     sprintf "%s%sval %s : %s%s\n"
       doc
       pad
@@ -120,6 +120,7 @@ module Impl = struct
     | Record_constructor
     | Record_accessor
     | Identity
+    | Raw_body of string
     | Constant of string
     | Http_request of http_verb * return
     | Derived
@@ -165,6 +166,7 @@ module Impl = struct
   let record_constructor = create Record_constructor
   let record_accessor = create Record_accessor
   let identity = create Identity
+  let with_raw_body name params ~body = create (Raw_body body) name params
   let constant name value =
     create (Constant value) name [positional "()" "unit"]
   let http_request ~return verb = create (Http_request (verb, return))
@@ -225,36 +227,36 @@ module Impl = struct
       sprintf {| match %s with Some x -> string_of_%s x | None -> "" |} in
     assoc_string_with
       (fun p ->
-        let orig_name, value =
-          match p with
-          | Named ({ name; type_ = "string"}, Some origin) ->
-              (origin.orig_name, name)
-          | Named ({ name; type_ }, Some origin) ->
-              (origin.orig_name, string_of type_ name)
-          | Named ({ name; type_ = "string"}, None) ->
-              (name, name)
-          | Named ({ name; type_ }, None) ->
-              (name, string_of type_ name)
-          | Optional ({ name; type_ = "string"}, Some origin) ->
-              (origin.orig_name, string_opt_to_string name)
-          | Optional ({ name; type_ }, Some origin) ->
-              (origin.orig_name, opt_to_string name type_)
-          | Optional ({ name; type_ }, None) ->
-              (name, opt_to_string name type_)
-          | Positional _ ->
-              failwith "positional parameters don't go in requests" in
-        sprintf "(\"%s\", %s)" orig_name value)
+         let orig_name, value =
+           match p with
+           | Named ({ name; type_ = "string"}, Some origin) ->
+             (origin.orig_name, name)
+           | Named ({ name; type_ }, Some origin) ->
+             (origin.orig_name, string_of type_ name)
+           | Named ({ name; type_ = "string"}, None) ->
+             (name, name)
+           | Named ({ name; type_ }, None) ->
+             (name, string_of type_ name)
+           | Optional ({ name; type_ = "string"}, Some origin) ->
+             (origin.orig_name, string_opt_to_string name)
+           | Optional ({ name; type_ }, Some origin) ->
+             (origin.orig_name, opt_to_string name type_)
+           | Optional ({ name; type_ }, None) ->
+             (name, opt_to_string name type_)
+           | Positional _ ->
+             failwith "positional parameters don't go in requests" in
+         sprintf "(\"%s\", %s)" orig_name value)
 
   let assoc_string =
     assoc_string_with
       (fun p ->
-        let name = param_name p in
-        let type_ = param_type p in
-        let value =
-          if type_ = "string"
-            then name
-            else sprintf "string_of_%s %s" type_ name in
-        sprintf "(\"%s\", %s)" name value)
+         let name = param_name p in
+         let type_ = param_type p in
+         let value =
+           if type_ = "string"
+           then name
+           else sprintf "string_of_%s %s" type_ name in
+         sprintf "(\"%s\", %s)" name value)
 
   let make_query params =
     params
@@ -300,10 +302,10 @@ module Impl = struct
     params
     |> List.filter (fun p -> param_location p = Some `Header)
     |> function
-       | [] ->
-           "headers"
-       | hs ->
-           sprintf {|
+    | [] ->
+      "headers"
+    | hs ->
+      sprintf {|
              let headers =
                match headers with
                | Some hs -> hs
@@ -318,20 +320,20 @@ module Impl = struct
     match body_params with
     | [] -> "None"
     | [p] ->
-        let to_yojson =
-          param_type p
-          |> String.split_on_char '.'
-          |> unsnoc
-          |> some
-          |> fst
-          |> String.concat "."
-          |> sprintf "%s.to_yojson" in
-        String.trim @@
-          sprintf {| Some (Body.of_string (Yojson.Safe.to_string (%s %s))) |}
-            to_yojson
-            (param_name p)
+      let to_yojson =
+        param_type p
+        |> String.split_on_char '.'
+        |> unsnoc
+        |> some
+        |> fst
+        |> String.concat "."
+        |> sprintf "%s.to_yojson" in
+      String.trim @@
+      sprintf {| Some (Body.of_string (Yojson.Safe.to_string (%s %s))) |}
+        to_yojson
+        (param_name p)
     | _ ->
-        failwith "Val.Impl.make_body: there can be only one body parameter"
+      failwith "Val.Impl.make_body: there can be only one body parameter"
 
   let string_of_http_verb = function
     | Get     -> "get"
@@ -365,11 +367,11 @@ module Impl = struct
         Lwt.return (if code >= 200 && code < 300 then %s.of_yojson json else Error body)
       |} client_fun body_param result_cont module_name
       | Type type_name ->
-          let conv_result = function
-            | "unit"   -> "()"
-            | "string" -> "body"
-            | other    -> sprintf "(%s_of_string body)" other in
-          sprintf {|
+        let conv_result = function
+          | "unit"   -> "()"
+          | "string" -> "body"
+          | other    -> sprintf "(%s_of_string body)" other in
+        sprintf {|
         Client.%s ?ctx ?headers%s uri >>= %s
         ignore body;
         Lwt.return (if code >= 200 && code < 300 then Ok %s else Error (string_of_int code))
@@ -408,6 +410,7 @@ module Impl = struct
     | Record_accessor -> sprintf "%st.%s" pad t.name
     | Identity -> sprintf "%st" pad
     | Constant v -> sprintf "%s\"%s\"" pad v
+    | Raw_body v -> sprintf "%s%s" pad v
     | Http_request (Get, return) -> http_get ~pad ~return t.params
     | Http_request (Put, return) -> http_put ~pad ~return t.params
     | Http_request (Post, return) -> http_post ~pad ~return t.params
@@ -416,7 +419,7 @@ module Impl = struct
     | Http_request (Patch, return) -> http_patch ~pad ~return t.params
     | Http_request (Options, return) -> http_options ~pad ~return t.params
     | Derived ->
-        failwith "Val.Impl.body_to_string: derived functions have no body"
+      failwith "Val.Impl.body_to_string: derived functions have no body"
 
   let param_to_string = function
     | Named (p, _) -> sprintf "~%s" p.name
@@ -436,20 +439,20 @@ module Impl = struct
     let params =
       match kind with
       | Http_request _ ->
-          let ctx = optional "ctx" "Cohttp_lwt_unix.Client.ctx" in
-          let headers = optional "headers" "Cohttp.Header.t" in
-          let uri = positional "uri" "Uri.t" in
-          params @ [ctx; headers; uri]
+        let ctx = optional "ctx" "Cohttp_lwt_unix.Client.ctx" in
+        let headers = optional "headers" "Cohttp.Header.t" in
+        let uri = positional "uri" "Uri.t" in
+        params @ [ctx; headers; uri]
       | _ ->
-          params in
+        params in
     match kind with
     | Derived -> ""
     | _ ->
-        sprintf "%slet %s %s=\n%s\n"
-          pad
-          name
-          (params_to_string params)
-          (body_to_string ~indent:(indent + 2) value)
+      sprintf "%slet %s %s=\n%s\n"
+        pad
+        name
+        (params_to_string params)
+        (body_to_string ~indent:(indent + 2) value)
 end
 
 type t =
